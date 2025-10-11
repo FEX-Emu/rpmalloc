@@ -530,10 +530,10 @@ static const size_class_t global_size_class[SIZE_CLASS_COUNT] = {
     LCLASS(262144), LCLASS(327680), LCLASS(393216), LCLASS(458752), LCLASS(524288)};
 
 //! Threshold number of pages for when free pages are decommitted
-static uint32_t global_page_free_overflow[4] = {16, 8, 2, 0};
+static uint32_t global_page_free_overflow[4] = {0, 0, 0, 0};
 
 //! Number of pages to retain when free page threshold overflows
-static uint32_t global_page_free_retain[4] = {4, 2, 1, 0};
+static uint32_t global_page_free_retain[4] = {0, 0, 0, 0};
 
 //! OS huge page support
 static int os_huge_pages;
