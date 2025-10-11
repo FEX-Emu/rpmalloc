@@ -2055,6 +2055,7 @@ rpmalloc_initialize(rpmalloc_interface_t* memory_interface) {
 #else
 	os_page_size = os_map_granularity;
 #endif
+#ifdef ENABLE_HUGE_PAGES
 	if (global_config.enable_huge_pages) {
 #if PLATFORM_WINDOWS
 		HANDLE token = 0;
@@ -2117,7 +2118,10 @@ rpmalloc_initialize(rpmalloc_interface_t* memory_interface) {
 		os_page_size = 2 * 1024 * 1024;
 		os_map_granularity = os_page_size;
 #endif
-	} else {
+	} else
+#endif
+  {
+
 		os_huge_pages = 0;
 	}
 
