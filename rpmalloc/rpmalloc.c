@@ -59,7 +59,11 @@
 #if PLATFORM_WINDOWS
 #include <windows.h>
 #include <fibersapi.h>
+#if defined(DYNAMIC_TLS_NO_FLS)
+static DWORD tls_key = 0;
+#else
 static DWORD fls_key;
+#endif
 #endif
 #if PLATFORM_POSIX
 #include <sys/mman.h>
@@ -570,7 +574,7 @@ static size_t os_page_size;
 //////
 
 //! Current thread heap
-#if defined(_MSC_VER) && !defined(__clang__)
+#if defined(WIN32)
 #define TLS_MODEL
 #define _Thread_local __declspec(thread)
 #elif defined(__ANDROID__)
@@ -584,7 +588,10 @@ static size_t os_page_size;
 #define TLS_MODEL __attribute__((tls_model("initial-exec")))
 // #define TLS_MODEL
 #endif
+
+#if !defined(DYNAMIC_TLS_NO_FLS)
 static _Thread_local heap_t* global_thread_heap TLS_MODEL = &global_heap_fallback;
+#endif
 
 static heap_t*
 heap_allocate(int first_class);
@@ -621,6 +628,8 @@ get_thread_id(void) {
 #else
 	__asm__ volatile("mrs %0, tpidr_el0" : "=r"(tid));
 #endif
+#elif defined(DYNAMIC_TLS_NO_FLS)
+#error Not implemented for dynamic TLS.
 #else
 	tid = (uintptr_t)&global_thread_heap;
 #endif
@@ -628,6 +637,31 @@ get_thread_id(void) {
 #endif
 }
 
+#if defined(DYNAMIC_TLS_NO_FLS)
+//! Set the current thread heap
+static void
+set_thread_heap(heap_t* heap) {
+	if (heap && (heap->id != 0)) {
+		rpmalloc_assert(heap->id != 0, "Default heap being used");
+		heap->owner_thread = get_thread_id();
+	}
+#if PLATFORM_WINDOWS
+	TlsSetValue(tls_key, heap);
+#else
+	pthread_setspecific(pthread_key, heap);
+#endif
+}
+
+//! Get the current thread heap
+static inline heap_t*
+get_thread_heap(void) {
+  void *result = TlsGetValue(tls_key);
+  if (!result) {
+    result = &global_heap_fallback;
+  }
+  return result;
+}
+#else
 //! Set the current thread heap
 static void
 set_thread_heap(heap_t* heap) {
@@ -643,17 +677,18 @@ set_thread_heap(heap_t* heap) {
 #endif
 }
 
+//! Get the current thread heap
+static inline heap_t*
+get_thread_heap(void) {
+	return global_thread_heap;
+}
+#endif
+
 static heap_t*
 get_thread_heap_allocate(void) {
 	heap_t* heap = heap_allocate(0);
 	set_thread_heap(heap);
 	return heap;
-}
-
-//! Get the current thread heap
-static inline heap_t*
-get_thread_heap(void) {
-	return global_thread_heap;
 }
 
 //! Get the size class from given size in bytes for tiny blocks (below 16 times the minimum granularity)
@@ -2139,7 +2174,11 @@ rpmalloc_initialize(rpmalloc_interface_t* memory_interface) {
 #endif
 
 #ifdef _WIN32
+#if defined(DYNAMIC_TLS_NO_FLS)
+  tls_key = TlsAlloc();
+#else
 	fls_key = FlsAlloc(&rpmalloc_thread_destructor);
+#endif
 #else
 	pthread_key_create(&pthread_key, rpmalloc_thread_destructor);
 #endif
@@ -2183,8 +2222,13 @@ rpmalloc_finalize(void) {
 	}
 
 #ifdef _WIN32
+#if defined(DYNAMIC_TLS_NO_FLS)
+  TlsFree(tls_key);
+  tls_key = 0;
+#else
 	FlsFree(fls_key);
 	fls_key = 0;
+#endif
 #else
 	pthread_key_delete(pthread_key);
 	pthread_key = 0;
