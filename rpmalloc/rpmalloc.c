@@ -503,7 +503,14 @@ static rpmalloc_interface_t* global_memory_interface;
 //! Default memory interface
 static rpmalloc_interface_t global_memory_interface_default;
 //! Current configuration
-static rpmalloc_config_t global_config = {0};
+static rpmalloc_config_t global_config = {
+	.page_size = 0,
+	.enable_huge_pages = 0,
+	.disable_decommit = 0,
+	.page_name = "FEXAllocator",
+	.huge_page_name = "FEXAllocator",
+	.unmap_on_finalize = 0,
+};
 //! Main thread ID
 static uintptr_t global_main_thread_id;
 
