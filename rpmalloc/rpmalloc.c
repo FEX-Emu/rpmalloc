@@ -786,7 +786,7 @@ os_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_size) {
 	DWORD do_commit = MEM_COMMIT;
 #endif
 	void* ptr =
-	    VirtualAlloc(0, map_size, (os_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | do_commit, PAGE_READWRITE);
+	    VirtualAlloc(0, map_size, (os_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | do_commit | MEM_TOP_DOWN, PAGE_READWRITE);
 #else
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNINITIALIZED;
 #if defined(__APPLE__) && !TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
