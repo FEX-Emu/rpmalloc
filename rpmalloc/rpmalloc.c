@@ -516,14 +516,23 @@ static uintptr_t global_main_thread_id;
 
 typedef void* (*mmap_hook_type)( size_t size, size_t alignment, size_t* offset, size_t* mapped_size);
 typedef void (*munmap_hook_type)(void* address, size_t offset, size_t mapped_size);
+typedef void (*vma_name_hook_type)(const char* name, const void* address, size_t size);
 
 static void*
 os_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_size);
 static void
 os_munmap(void* address, size_t offset, size_t mapped_size);
 
+static void
+os_vma_name(const char* name, const void* address, size_t size) {
+#if defined(__linux__) || defined(__ANDROID__)
+	(void)prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, (uintptr_t)address, size, (uintptr_t)name);
+#endif
+}
+
 mmap_hook_type rp_mmap_hook = os_mmap;
 munmap_hook_type rp_munmap_hook = os_munmap;
+vma_name_hook_type rp_name_hook = os_vma_name;
 
 static void*
 trampoline_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_size) {
@@ -760,17 +769,17 @@ get_page_aligned_size(size_t size) {
 
 static void
 os_set_page_name(void* address, size_t size) {
+  const char* name = os_huge_pages ? global_config.huge_page_name : global_config.page_name;
 #if defined(__linux__) || defined(__ANDROID__)
-	const char* name = os_huge_pages ? global_config.huge_page_name : global_config.page_name;
-	if ((address == MAP_FAILED) || !name)
+	if ((address == MAP_FAILED) || !name) {
 		return;
-	// If the kernel does not support CONFIG_ANON_VMA_NAME or if the call fails
-	// (e.g. invalid name) it is a no-op basically.
-	(void)prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, (uintptr_t)address, size, (uintptr_t)name);
-#else
-	(void)sizeof(size);
-	(void)sizeof(address);
+  }
+#elif PLATFORM_WINDOWS
+	if (!address || !name) {
+		return;
+  }
 #endif
+  rp_name_hook(name, address, size);
 }
 
 static void*
@@ -787,6 +796,7 @@ os_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_size) {
 #endif
 	void* ptr =
 	    VirtualAlloc(0, map_size, (os_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | do_commit | MEM_TOP_DOWN, PAGE_READWRITE);
+	os_set_page_name(ptr, map_size);
 #else
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNINITIALIZED;
 #if defined(__APPLE__) && !TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
