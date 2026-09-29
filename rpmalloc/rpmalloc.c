@@ -516,12 +516,18 @@ static uintptr_t global_main_thread_id;
 
 typedef void* (*mmap_hook_type)( size_t size, size_t alignment, size_t* offset, size_t* mapped_size);
 typedef void (*munmap_hook_type)(void* address, size_t offset, size_t mapped_size);
+typedef void (*mcommit_hook_type)(void* address, size_t size);
+typedef void (*mdecommit_hook_type)(void* address, size_t size);
 typedef void (*vma_name_hook_type)(const char* name, const void* address, size_t size);
 
 static void*
 os_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_size);
 static void
 os_munmap(void* address, size_t offset, size_t mapped_size);
+static void
+os_mcommit(void* address, size_t size);
+static void
+os_mdecommit(void* address, size_t size);
 
 static void
 os_vma_name(const char* name, const void* address, size_t size) {
@@ -532,6 +538,8 @@ os_vma_name(const char* name, const void* address, size_t size) {
 
 mmap_hook_type rp_mmap_hook = os_mmap;
 munmap_hook_type rp_munmap_hook = os_munmap;
+mcommit_hook_type rp_mcommit_hook = os_mcommit;
+mdecommit_hook_type rp_mdecommit_hook = os_mdecommit;
 vma_name_hook_type rp_name_hook = os_vma_name;
 
 static void*
@@ -542,6 +550,16 @@ trampoline_mmap(size_t size, size_t alignment, size_t* offset, size_t* mapped_si
 static void
 trampoline_munmap(void* address, size_t offset, size_t mapped_size) {
   return rp_munmap_hook(address, offset, mapped_size);
+}
+
+static void
+trampoline_mcommit(void* address, size_t size) {
+  rp_mcommit_hook(address, size);
+}
+
+static void
+trampoline_mdecommit(void* address, size_t size) {
+  rp_mdecommit_hook(address, size);
 }
 
 //! Size classes
@@ -2088,8 +2106,8 @@ rpmalloc_initialize(rpmalloc_interface_t* memory_interface) {
 	global_memory_interface = memory_interface ? memory_interface : &global_memory_interface_default;
 	if (!global_memory_interface->memory_map || !global_memory_interface->memory_unmap) {
 		global_memory_interface->memory_map = trampoline_mmap;
-		global_memory_interface->memory_commit = os_mcommit;
-		global_memory_interface->memory_decommit = os_mdecommit;
+		global_memory_interface->memory_commit = trampoline_mcommit;
+		global_memory_interface->memory_decommit = trampoline_mdecommit;
 		global_memory_interface->memory_unmap = trampoline_munmap;
 	}
 
